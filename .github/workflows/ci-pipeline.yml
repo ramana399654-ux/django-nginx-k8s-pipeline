@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  # Job 1: Test and Scan (What we built earlier)
+  # Job 1: Test and Scan (Flask Setup)
   test-and-scan:
     runs-on: ubuntu-latest
     steps:
@@ -22,44 +22,39 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install -r backend/requirements.txt # ◄--- Points to your backend folder
 
     - name: Run Unit Tests
       run: |
-        python m unittest test_app.py
+        cd backend && python -m unittest test_app.py # ◄--- Navigates to backend and runs Flask tests
 
-  # Job 2: Build and Push to AWS ECR (Our New Enterprise Milestone!)
+  # Job 2: Build and Push to AWS ECR
   build-and-push-ecr:
     runs-on: ubuntu-latest
-    needs: test-and-scan # ◄--- CRITICAL: Only build if tests pass!
-    # Only run the push step if the code is actually merging into main
+    needs: test-and-scan
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Step A: Log into AWS using the secure keys from your vault
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ vars.AWS_REGION || secrets.AWS_REGION || 'ap-southeast-1' }}
+        aws-region: ap-southeast-1
 
-    # Step B: Log into the Docker daemon wrapper for ECR
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
-    # Step C: Build the Docker container, tag it, and push it to AWS
     - name: Build, Tag, and Push Image to ECR
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: django-backend
-        # Use the unique GitHub commit hash as the version tag
         IMAGE_TAG: ${{ github.sha }} 
       run: |
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./backend
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./backend # ◄--- Context set back to ./backend
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
