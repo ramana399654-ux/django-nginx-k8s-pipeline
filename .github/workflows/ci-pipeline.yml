@@ -30,7 +30,9 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r backend/requirements.txt
 
-    # Step 4: Run our Python Unit Tests
+    # Step 4: Run our Python Unit Tests (with PYTHONPATH confiured )
     - name: Run Unit Tests
+      env:
+        PYTHONPATH: backend
       run: |
-        python -m unittest backend/test_app.py
+        python -m unittest discover -s backend -p "test_*.py"
