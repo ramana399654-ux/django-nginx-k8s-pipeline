@@ -1,6 +1,5 @@
-name: Continuous Integration
+name: Django CI/CD Pipeline
 
-# Trigger this pipeline on every push to the main branch
 on:
   push:
     branches: [ main ]
@@ -8,31 +7,59 @@ on:
     branches: [ main ]
 
 jobs:
+  # Job 1: Test and Scan (What we built earlier)
   test-and-scan:
     runs-on: ubuntu-latest
-
     steps:
-    # Step 1: Download the code from the repository onto the runner server
-    - name: Checkout Code
+    - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of SonarCloud analysis
 
-    # Step 2: Set up Python environment
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-backend: '3.10'
+        python-version: '3.11'
 
-    # Step 3: Install application dependencies
-    - name: Install Dependencies
+    - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r backend/requirements.txt
 
-    # Step 4: Run our Python Unit Tests (with PYTHONPATH confiured )
     - name: Run Unit Tests
-      env:
-        PYTHONPATH: backend
       run: |
-        python -m unittest discover -s backend -p "test_*.py"
+        python backend/manage.py test
+
+  # Job 2: Build and Push to AWS ECR (Our New Enterprise Milestone!)
+  build-and-push-ecr:
+    runs-on: ubuntu-latest
+    needs: test-and-scan # ◄--- CRITICAL: Only build if tests pass!
+    # Only run the push step if the code is actually merging into main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # Step A: Log into AWS using the secure keys from your vault
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ deliverables.AWS_REGION || secrets.AWS_REGION || 'ap-southeast-1' }}
+
+    # Step B: Log into the Docker daemon wrapper for ECR
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    # Step C: Build the Docker container, tag it, and push it to AWS
+    - name: Build, Tag, and Push Image to ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: django-backend
+        # Use the unique GitHub commit hash as the version tag
+        IMAGE_TAG: ${{ github.sha }} 
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./backend
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
