@@ -1,0 +1,17 @@
+# Git metadata
+.git
+.gitignore
+
+# Python caching and environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+venv/
+ENV/
+
+# Local IDE configs
+.vscode/
+.idea/
