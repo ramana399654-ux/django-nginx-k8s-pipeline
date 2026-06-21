@@ -7,26 +7,37 @@ on:
     branches: [ main ]
 
 jobs:
-  # Job 1: Test and Scan (Flask Setup)
+  # Job 1: Test and Scan (Now fully compliant with Sonar SAST)
   test-and-scan:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      # Pinning to v4.1.7
+      uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      with:
+        fetch-depth: 0
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      # Pinning to v5.1.1
+      uses: actions/setup-python@65d7f2d534ac1bc67fcd62888c5f4f3d2cb2b236
       with:
         python-version: '3.11'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r backend/requirements.txt # ◄--- Points to your backend folder
+        pip install -r backend/requirements.txt
 
     - name: Run Unit Tests
       run: |
-        cd backend && python -m unittest test_app.py # ◄--- Navigates to backend and runs Flask tests
+        cd backend && python -m unittest test_app.py
+
+    - name: SonarCloud Scan
+      # Pinning to v3.1.0
+      uses: SonarSource/sonarcloud-github-action@cb2da3b4d18fa718f45f958862cf01b1df400494
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   # Job 2: Build and Push to AWS ECR
   build-and-push-ecr:
